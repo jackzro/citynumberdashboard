@@ -1,0 +1,221 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>City Number Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+
+  <body class="bg-gray-100 min-h-screen">
+    <div class="max-w-6xl mx-auto p-6">
+      <h1 class="text-3xl font-bold mb-6">📊 City Number Dashboard</h1>
+
+      <!-- UPLOAD EXCEL -->
+      <div class="bg-white p-6 rounded-xl shadow mb-6">
+        <h2 class="text-xl font-semibold mb-4">Upload Excel</h2>
+        <form id="uploadForm" class="grid grid-cols-3 gap-4">
+          <select
+            id="cityUpload"
+            name="city"
+            class="border p-2 rounded"
+            required
+          ></select>
+          <input type="file" name="file" accept=".xlsx" required />
+          <button class="bg-blue-600 text-white rounded px-4">Upload</button>
+        </form>
+      </div>
+
+      <!-- ADD SINGLE -->
+      <div class="bg-white p-6 rounded-xl shadow mb-6">
+        <h2 class="text-xl font-semibold mb-4">Add Single</h2>
+        <form id="singleForm" class="grid grid-cols-4 gap-4">
+          <select id="citySingle" class="border p-2 rounded" required></select>
+          <input
+            id="singleNumber"
+            type="text"
+            placeholder="Number"
+            class="border p-2 rounded"
+            required
+          />
+          <input
+            id="singlePrice"
+            type="text"
+            placeholder="Price"
+            inputmode="numeric"
+            class="border p-2 rounded"
+            required
+          />
+          <button class="bg-green-600 text-white rounded px-4">Add</button>
+        </form>
+      </div>
+
+      <!-- TABLE -->
+      <div class="bg-white p-6 rounded-xl shadow">
+        <div class="flex flex-wrap gap-4 items-center mb-4">
+          <select id="citySelect" class="border p-2 rounded"></select>
+
+          <select id="priceSort" class="border p-2 rounded">
+            <option value="asc">Cheapest → Expensive</option>
+            <option value="desc">Expensive → Cheapest</option>
+          </select>
+        </div>
+
+        <table class="w-full border">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="border p-2">Number</th>
+              <th class="border p-2">Price</th>
+            </tr>
+          </thead>
+          <tbody id="tableData">
+            <tr>
+              <td colspan="2" class="text-center p-4">Select city</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="flex justify-between items-center mt-4">
+          <button id="prevBtn" class="px-4 py-2 bg-gray-200 rounded">
+            Prev
+          </button>
+          <span id="pageInfo" class="text-sm"></span>
+          <button id="nextBtn" class="px-4 py-2 bg-gray-200 rounded">
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /* ================== CONFIG ================== */
+      const CITIES = ["Jakarta", "Bandung", "Surabaya", "Medan", "Bali"];
+      let currentPage = 1;
+      let totalPages = 1;
+
+      /* ================== UTIL ================== */
+      function formatPrice(val) {
+        return new Intl.NumberFormat("id-ID").format(val);
+      }
+
+      /* ================== LOAD CITIES ================== */
+      function loadCities() {
+        const selects = [cityUpload, citySingle, citySelect];
+        selects.forEach((sel) => {
+          sel.innerHTML = `<option value="">Select City</option>`;
+          CITIES.forEach((city) => {
+            sel.innerHTML += `<option value="${city}">${city}</option>`;
+          });
+        });
+      }
+
+      /* ================== PRICE INPUT FORMAT ================== */
+      singlePrice.addEventListener("input", (e) => {
+        let v = e.target.value.replace(/\D/g, "").replace(/^0+/, "");
+        e.target.value = v.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      });
+
+      /* ================== ADD SINGLE ================== */
+      singleForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const body = {
+          city: citySingle.value,
+          number: singleNumber.value,
+          price: Number(singlePrice.value.replace(/\./g, "")),
+        };
+
+        try {
+          const res = await fetch("/api/add-number", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+
+          const data = await res.json();
+          if (!res.ok) return alert(data.error || "Failed");
+
+          alert("Added successfully");
+          singleNumber.value = "";
+          singlePrice.value = "";
+          loadTable();
+        } catch {
+          alert("Network error");
+        }
+      });
+
+      /* ================== UPLOAD EXCEL ================== */
+      uploadForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const formData = new FormData(uploadForm);
+
+        const res = await fetch("/api/upload-excel", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        alert(data.success ? "Uploaded" : data.error || "Error");
+        loadTable();
+      });
+
+      /* ================== LOAD TABLE ================== */
+      async function loadTable() {
+        const city = citySelect.value;
+        const sort = priceSort.value;
+        if (!city) return;
+
+        const res = await fetch(
+          `/api/numbers?city=${city}&page=${currentPage}&sort=${sort}`,
+        );
+        const result = await res.json();
+
+        totalPages = result.totalPages;
+        pageInfo.textContent = `Page ${result.page} of ${totalPages}`;
+
+        tableData.innerHTML = result.data.length
+          ? result.data
+              .map(
+                (r) => `
+      <tr>
+        <td class="border p-2">${r.number_value}</td>
+        <td class="border p-2">${formatPrice(r.price)}</td>
+      </tr>
+    `,
+              )
+              .join("")
+          : `<tr><td colspan="2" class="text-center p-4">No data</td></tr>`;
+
+        prevBtn.disabled = currentPage <= 1;
+        nextBtn.disabled = currentPage >= totalPages;
+      }
+
+      /* ================== EVENTS ================== */
+      citySelect.addEventListener("change", () => {
+        currentPage = 1;
+        loadTable();
+      });
+
+      priceSort.addEventListener("change", () => {
+        currentPage = 1;
+        loadTable();
+      });
+
+      prevBtn.addEventListener("click", () => {
+        if (currentPage > 1) {
+          currentPage--;
+          loadTable();
+        }
+      });
+
+      nextBtn.addEventListener("click", () => {
+        if (currentPage < totalPages) {
+          currentPage++;
+          loadTable();
+        }
+      });
+
+      /* ================== INIT ================== */
+      loadCities();
+    </script>
+  </body>
+</html>
