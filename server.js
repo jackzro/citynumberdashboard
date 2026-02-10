@@ -12,10 +12,11 @@ app.use(express.static("public"));
 const pool = mysql.createPool({
   host: "localhost",
   user: "root",
-  password: "",
+  password: "StrongPasswordHere",
   database: "callee",
   connectionLimit: 5,
 });
+//StrongPasswordHere
 
 /* Upload config */
 const upload = multer({ dest: "uploads/" });
